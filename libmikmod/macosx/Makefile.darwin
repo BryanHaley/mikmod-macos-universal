@@ -7,6 +7,7 @@ AS=as
 AR=ar
 RANLIB=ranlib
 LIPO=lipo
+MAKE=make
 else
 CC=$(CROSS)-gcc
 AS=$(CROSS)-as
@@ -79,6 +80,19 @@ LDFLAGS+=-Wl,-compatibility_version,4.0 -Wl,-current_version,6.0
 #CPPFLAGS+=-DHAVE_POSIX_MEMALIGN
 #LDFLAGS+=-mmacosx-version-min=10.6 -Wl,-lbundle1.o
 
+ARCH:=
+
+X64-FLAGS=-target x86_64-apple-macos10.9
+ARM64-FLAGS=-target arm64-apple-macos11
+
+ifeq ($(ARCH),x64)
+	CFLAGS+=$(X64-FLAGS)
+	LDFLAGS+=$(X64-FLAGS)
+else ifeq ($(ARCH),arm64)
+	CFLAGS+=$(ARM64-FLAGS)
+	LDFLAGS+=$(ARM64-FLAGS)
+endif
+
 COMPILE=$(CC) -c $(CFLAGS) $(CPPFLAGS) -I../macosx -I../include
 
 .SUFFIXES:
@@ -87,7 +101,11 @@ COMPILE=$(CC) -c $(CFLAGS) $(CPPFLAGS) -I../macosx -I../include
 DYLIB_VER=3
 #LIBSHARED=libmikmod.$(DYLIB_VER).dylib
 LIBSHARED=libmikmod.dylib
+LIBSHARED-X64=libmikmod_x64.dylib
+LIBSHARED-ARM64=libmikmod_arm64.dylib
 LIBSTATIC=libmikmod.a
+LIBSTATIC-X64=libmikmod_x64.a
+LIBSTATIC-ARM64=libmikmod_arm64.a
 
 LIBS=$(LIBSHARED)
 
@@ -120,7 +138,9 @@ help:
 	@echo ""
 
 clean:
-	rm -f $(LIBSHARED) $(LIBSTATIC) *.o
+	-rm -rf $(LIBSHARED) $(LIBSTATIC) *.o
+	-rm -rf $(LIBSHARED-X64) $(LIBSTATIC-X64) *.o
+	-rm -rf $(LIBSHARED-ARM64) $(LIBSTATIC-ARM64) *.o
 
 dylib-sse2: CFLAGS+=$(SSE2FLAGS)
 dylib-sse2: CPPFLAGS+=-DMIKMOD_SIMD
@@ -140,6 +160,22 @@ static-altivec: static
 
 dylib: $(LIBSHARED)
 static: $(LIBSTATIC)
+
+dylib-x64: $(LIBSHARED-X64)
+dylib-arm64: $(LIBSHARED-ARM64)
+
+dylib-universal:
+	$(MAKE) -f Makefile.darwin ARCH=x64 dylib-x64
+	rm -rf *.o
+	$(MAKE) -f Makefile.darwin ARCH=arm64 dylib-arm64
+	rm -rf *.o
+	$(LIPO) -create $(LIBSHARED-X64) $(LIBSHARED-ARM64) -output $(LIBSHARED)
+
+$(LIBSHARED-X64): $(OBJ)
+	$(CC) -o $(LIBSHARED-X64) $(OBJ) $(LDFLAGS) $(LDLIBS)
+
+$(LIBSHARED-ARM64): $(OBJ)
+	$(CC) -o $(LIBSHARED-ARM64) $(OBJ) $(LDFLAGS) $(LDLIBS)
 
 $(LIBSHARED): $(OBJ)
 	$(CC) -o $(LIBSHARED) $(OBJ) $(LDFLAGS) $(LDLIBS)
